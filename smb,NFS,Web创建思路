@@ -1,0 +1,159 @@
+
+                                      如何配置多用户samba和挂载
+
+
+影响共享资源客户端权限的要素：
+1.服务端共享文件本身的全权
+2.服务端samba共享配置文件里是否有给相应用户权限
+3.服务端selinux安全机制对共享文件权限的保护是否有打开
+
+
+
+服务端
+1.安装软件包
+samba
+2.创建共享文件  
+mkdir
+3.创建共享用户及设置密码和服务器上与共享用户对应的普通用户 （方便给共享用户读写执行权限）
+  useradd                   pdbedit -a
+4.根据需求给相应用户对共享文件的权限
+setfacl -m u：用户名：权限类别   /共享文件
+5.查看selinux是否对samba共享文件有开启rw权限。如果没有，那么就需要开启。
+fetsebool -a  |   grep  samba_export
+setsebool -P samba_export_all_rw=on
+6.修改配置文件，配置相应需求的参数。
+vim /etc/samba/smb.conf
+[global]
+   workgroup=自定义组名
+[共享文件名]
+    path=共享文件绝对路径   
+    weite list= 共享用户名     （设置有可写入权限的用户）
+     。。。。。。  
+7.起服务，设置开机自起。
+smb
+
+客户端
+1.安装软件包
+samba-client （客户端管理员查看和测试samba共享） cifs-utils （为客户端非管理员用户查看共享文件提供相应的一系列工具，如：multiuser挂载技术和cifscreds技术）
+2.将服务端的共享文件挂载到本地 （更方便的查看共享文件）。
+vim /etc/fstab
+     //服务器IP地址或域名/共享文件夹名    挂载点   类型是cifs  username=共享文件夹所属共享用户，passwrd=所属用户的密码，multiuser,sec=ntlmssp,_netdev    0    0
+3.重载挂载
+mount -a
+4.客户机访问
+cifscreds  add -u 共享用户名   服务器地址
+
+
+
+
+
+
+
+
+
+
+                                       NFS  共享
+
+
+影响客户端对文件权限的要素：
+1.服务端被共享文件本身的权限
+2.服务端NFS共享配置文件里是否有给权限
+
+服务端               教学环境配置安全密钥客户端脚本lab  nfskrb5 setup
+1.安装软件装包
+rpm  -q  nfs-utils
+2.创建共享文件
+mkdir
+3.给被共享文件相应的权限
+chmod
+4.修改NFS共享配置文件
+vim  /etc/exports
+/共享文件路径       客户机地址（权限）                             普通NFS
+/共享文件路径       客户机地址（权限，sec=krb5p）             安全NFS
+5.重起服务 ，设置开机自起
+systemctl restart  nfs-server  nfs-secure-server
+
+
+客户端          教学环境配置安全密钥客户端脚本lab  nfskrb5 setup
+1.创建读取共享文件的挂载点
+mkdir
+2.将服务端共享的文件挂载到本地
+vim /etc/fstab
+服务器IP地址或域名：共享文件夹路径     挂载点     类型nfs    _netdev  0  0              普通挂载
+服务器IP地址或域名：共享文件夹路径     挂载点     类型nfs sec=krb5p   _netdev  0  0     安全挂载
+3.重载挂载
+mount -a
+
+
+                                 
+
+
+                                      web主机
+
+
+1.安装软件包
+httpd    安全web还需安装mod_ssl
+2.创建网页目录和配置网页内容
+vim  /var/www/*/index.html
+3.创建和配置网页配置文件
+vim /etc/httpd/conf.d/*.conf    
+<VirtualHost *:80>
+       ServerName  网站的域名
+       DocumentRoot  网站的网页根目录
+</VirtualHost>          （多个网页就需要多个配置）
+
+<Directory  "需要控制的虚拟主机的网站根目录">  （需要控制网页访问权限时配置）
+        Require   设置允许的范围
+</Directory>
+
+Listen  8909    开启8909端口(如果有需要开启别的端口须添加端口）
+<VirtualHost *:8909>
+        DocumentRoot  网站的网页根目录
+        ServerName    网站的域名
+        WSGIScriptAlias  /  /var/www/webapp0/webinfo.wsgi
+                                      （实际网页程序的路径）
+</VirtualHost>
+4.添加新的wab 端口：
+semanage  port  -a  -t  http_port_t  -p  tcp  新添加的端口号
+5.下在证书    （只安全web需要）
+ 下载证书：/etc/pki/tls/certs/文件下放 签名证书和签名授权证书
+          /etc/pki/tls/private/文件下放  证书的密钥
+6.配置安全证书文件     (安全web才需要）
+vim  /etc/httpd/conf.d/ssl.conf
+Listen 443 https
+.. ..
+<VirtualHost _default_:443>
+DocumentRoot        "/var/www/*"                                     //网页目录
+ServerName          server0.example.com:443                              //站点的域名
+.. ..
+SSLCertificateFile        /etc/pki/tls/certs/下载的目录名.crt                  //网站证书
+.. ..
+SSLCertificateKeyFile     /etc/pki/tls/private/下载的目录名.key             //网站私钥
+.. .. 
+SSLCACertificateFile      /etc/pki/tls/certs/下载的目录名-ca.crt             //根证书
+7.重起服务
+httpd
+
+
+                                                                         作者：文香清
+                                                                         2017.11.9
+
+
+                     
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
